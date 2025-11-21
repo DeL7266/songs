@@ -280,8 +280,9 @@
             // 1. Show Spinner
             ui.spinner.classList.remove('hidden');
             
-            // 2. Simulate Network Verification (Wait 1s)
+            // 2. Play Animation (Fixed duration)
             setTimeout(() => {
+                // Animation step 1: Hide spinner, show checkmark
                 ui.spinner.classList.add('hidden');
                 ui.checkmark.classList.remove('hidden');
                 
@@ -289,23 +290,24 @@
                     ui.checkmark.classList.remove('scale-0');
                 }, 50);
 
+                // Mark as verified
                 state.userVerified = true;
 
-                // 3. Attempt to Start
-                // We wait a moment for visual satisfaction
+                // 3. Proceed only if files are loaded
                 setTimeout(() => {
+                    // Only proceed if files are ready. 
+                    // If not, the initPlayer function will handle it when files arrive.
                     if (state.playlist.length > 0) {
                         closeModalAndPlay();
-                    } else {
-                        // Playlist not ready yet (still fetching or failed)
-                        // The initPlayer function will handle the play trigger when it finishes
-                        // because state.userVerified is now true.
                     }
                 }, 600); 
             }, 800);
         });
 
         function closeModalAndPlay() {
+            // Guard to prevent double-execution
+            if (ui.startModal.classList.contains('opacity-0')) return;
+
             ui.startModal.classList.add('opacity-0', 'pointer-events-none');
             state.isPlaying = true;
             // UPDATED ICON SIZE (Mobile: text-6xl)

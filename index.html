@@ -110,25 +110,31 @@
             <p class="text-sm mb-4 text-red-300 font-semibold"><i class="fas fa-exclamation-triangle mr-2"></i>Auto-load failed</p>
             <p class="text-xs text-gray-300 mb-4">Browser security blocked local folder access. Please select your files manually.</p>
             <label class="cursor-pointer bg-white text-black px-6 py-3 rounded-full font-bold hover:bg-gray-200 transition block">
-                Select MP3 Files
-                <input type="file" id="manual-file-input" accept=".mp3,audio/mpeg" multiple class="hidden" />
+                Select Music or Video
+                <input type="file" id="manual-file-input" accept="audio/*,video/*,.mp3,.mp4,.webm" multiple class="hidden" />
             </label>
         </div>
     </div>
     <div id="app-container" class="relative z-10 w-full h-full flex flex-col md:flex-row overflow-hidden">
         
         <!-- Top Section (Mobile): Increased height to 70%, reduced padding to p-2 -->
-        <div class="w-full md:w-5/12 lg:w-4/12 h-[70%] md:h-full p-2 md:p-4 flex flex-col relative">
-            <div class="flex justify-between items-center mb-2 md:absolute md:top-4 md:left-4 md:right-4 md:z-20 px-2 md:px-0">
-                <button id="btn-playlist-toggle" class="p-2 text-white/70 hover:text-white transition"><i class="fas fa-bars text-xl"></i></button>
-                <span class="text-xs font-bold tracking-widest uppercase text-white/50">Now Playing</span>
-                <button class="p-2 text-white/70 hover:text-white transition"><i class="fas fa-ellipsis-v"></i></button>
+        <div id="left-column" class="w-full md:w-5/12 lg:w-4/12 h-[70%] md:h-full p-2 md:p-4 flex flex-col relative transition-all duration-500">
+            <div class="flex justify-between items-center mb-2 md:absolute md:top-4 md:left-4 md:right-4 md:z-20 px-2 md:px-0 pointer-events-none">
+                <button id="btn-playlist-toggle" class="p-2 text-white/70 hover:text-white transition pointer-events-auto drop-shadow-md"><i class="fas fa-bars text-xl"></i></button>
+                <span class="text-xs font-bold tracking-widest uppercase text-white/50 drop-shadow-md">Now Playing</span>
+                <button class="p-2 text-white/70 hover:text-white transition pointer-events-auto drop-shadow-md"><i class="fas fa-ellipsis-v"></i></button>
             </div>
-            <div class="flex-1 flex items-center justify-center relative w-full h-full overflow-hidden">
+            <div id="visual-wrapper" class="flex-1 flex items-center justify-center relative w-full h-full overflow-hidden transition-all duration-500">
                 <!-- w-full on mobile to maximize width (and thus height) -->
-                <div class="relative aspect-square w-full h-auto max-h-full max-w-full md:h-auto md:w-[96%] md:max-h-[90vh] shadow-2xl rounded-2xl overflow-hidden group">
-                    <img id="album-art" src="https://via.placeholder.com/500?text=Loading..." alt="Album Art" class="w-full h-full object-cover">
-                    <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-50"></div>
+                <!-- Added id="visual-container" to control aspect ratio -->
+                <div id="visual-container" class="relative aspect-square w-full h-auto max-h-full max-w-full md:h-auto md:w-[96%] md:max-h-[90vh] shadow-2xl rounded-2xl overflow-hidden group transition-all duration-500 ease-in-out">
+                    <img id="album-art" src="https://via.placeholder.com/500?text=Loading..." alt="Album Art" class="w-full h-full object-cover relative z-10">
+                    <!-- Changed object-cover to object-contain to prevent cropping -->
+                    <video id="audio-player" class="absolute inset-0 w-full h-full object-contain z-20 hidden" playsinline webkit-playsinline></video>
+                    <button id="btn-fullscreen" class="absolute top-4 right-4 z-50 w-10 h-10 bg-black/60 hover:bg-black/90 backdrop-blur-sm text-white rounded-full flex items-center justify-center transition opacity-0 group-hover:opacity-100 duration-300 hidden">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-50 z-30 pointer-events-none"></div>
                 </div>
             </div>
             <div class="md:hidden mt-3 text-center">
@@ -137,14 +143,14 @@
             </div>
         </div>
         <!-- Bottom Section (Mobile): Controls moved up to be closer to art -->
-        <div class="w-full md:w-7/12 lg:w-8/12 h-[30%] md:h-full flex flex-col justify-start pt-2 md:pt-0 md:justify-center relative">
+        <div id="right-column" class="w-full md:w-7/12 lg:w-8/12 h-[30%] md:h-full flex flex-col justify-start pt-2 md:pt-0 md:justify-center relative transition-all duration-500">
             
-            <div class="hidden md:flex flex-col items-start px-12 mb-8 w-full">
+            <div id="metadata-desktop" class="hidden md:flex flex-col items-start px-12 mb-8 w-full transition-opacity duration-300">
                 <span id="track-album-desktop" class="inline-block py-1 px-3 rounded-full bg-white/10 text-xs font-medium mb-4 backdrop-blur-md">Album</span>
                 <h1 id="track-title-desktop" class="text-5xl font-bold leading-tight mb-2 line-clamp-2">Waiting for files...</h1>
                 <p id="track-artist-desktop" class="text-2xl text-white/60">Please ensure files are in 'music' folder</p>
             </div>
-            <div class="relative w-full flex flex-col items-center justify-center mb-2">
+            <div id="controls-wrapper" class="relative w-full flex flex-col items-center justify-center mb-2 transition-all duration-500">
                 
                 <!-- Waveform Height: 140px on mobile (compact), 280px on desktop -->
                 <div class="relative w-full h-[140px] md:h-[280px] flex items-center justify-center group">
@@ -188,7 +194,6 @@
             </div>
         </div>
     </div>
-    <audio id="audio-player"></audio>
     <script>
         // ==========================================
         // USER CONFIGURATION
@@ -198,6 +203,7 @@
             files: [
                 'your girlfriend sucks..mp3', 
                 'blue..mp3',
+                'ПЕРЕИМЕНОВАЛИ ПАЧКУ! ВСТРЕТИЛИ ДЕСЯТКУ В НАПАХ ⏐ CSGO  THE FOREST.mp4', // Added video
                 // Add your files here
             ]
         };
@@ -269,6 +275,15 @@
             playlistPanel: document.getElementById('playlist-panel'),
             playlistItems: document.getElementById('playlist-items'),
             art: document.getElementById('album-art'),
+            
+            // Visual Layout Elements
+            leftColumn: document.getElementById('left-column'),
+            rightColumn: document.getElementById('right-column'),
+            visualWrapper: document.getElementById('visual-wrapper'),
+            visualContainer: document.getElementById('visual-container'),
+            controlsWrapper: document.getElementById('controls-wrapper'),
+            metadataDesktop: document.getElementById('metadata-desktop'),
+            
             titleMobile: document.getElementById('track-title-mobile'),
             artistMobile: document.getElementById('track-artist-mobile'),
             titleDesktop: document.getElementById('track-title-desktop'),
@@ -278,6 +293,7 @@
             totalDuration: document.getElementById('total-duration'),
             canvas: document.getElementById('waveform-canvas'),
             bgLayer: document.getElementById('bg-layer'),
+            fullscreenBtn: document.getElementById('btn-fullscreen'),
             
             // Modal & Verification
             startModal: document.getElementById('start-modal'),
@@ -290,62 +306,78 @@
             manualFileInput: document.getElementById('manual-file-input')
         };
         const colorThief = new ColorThief();
+
         // --- Initialization ---
         window.addEventListener('DOMContentLoaded', initPlayer);
+
+        // --- Fullscreen Logic ---
+        ui.fullscreenBtn.addEventListener('click', toggleFullScreen);
+        
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                if (ui.audio.requestFullscreen) {
+                    ui.audio.requestFullscreen().catch(e => console.log(e));
+                } else if (ui.audio.webkitRequestFullscreen) { /* Safari */
+                    ui.audio.webkitRequestFullscreen();
+                } else if (ui.audio.msRequestFullscreen) { /* IE11 */
+                    ui.audio.msRequestFullscreen();
+                }
+                // When in fullscreen, show native controls or ensure custom ones?
+                // Native controls are better for mobile video viewing
+                ui.audio.controls = true;
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+                ui.audio.controls = false;
+            }
+        }
+        
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) {
+                ui.audio.controls = false;
+            }
+        });
+
         // --- Manual File Selection (Fallback) ---
         ui.manualFileInput.addEventListener('change', (e) => {
-            const files = Array.from(e.target.files).filter(f => f.type.startsWith('audio/') || f.name.endsWith('.mp3'));
+            const files = Array.from(e.target.files).filter(f => f.type.startsWith('audio/') || f.type.startsWith('video/') || f.name.match(/\.(mp3|mp4|webm|ogg)$/i));
             if(files.length > 0) {
-                state.playlist = files;
+                state.playlist = files; // Files are Blob/File objects here
                 if (!state.userVerified) ui.loadingSpinner.classList.remove('hidden');
                 setupPlayerAfterLoad();
                 ui.fallbackSelector.style.display = 'none';
-                // If user already verified, just close modal and play
                 if(state.userVerified) {
                     closeModalAndPlay();
                 }
             }
         });
+
         // --- reCAPTCHA Interaction ---
         ui.checkbox.addEventListener('click', () => {
             if (ui.checkbox.classList.contains('processing') || state.userVerified) return;
             ui.checkbox.classList.add('processing');
-            // 1. Show Spinner
             ui.spinner.classList.remove('hidden');
-            
-            // 2. Simulate Network Verification (Wait 1s)
             setTimeout(() => {
                 ui.spinner.classList.add('hidden');
                 ui.checkmark.classList.remove('hidden');
-                
-                setTimeout(() => {
-                    ui.checkmark.classList.remove('scale-0');
-                }, 50);
+                setTimeout(() => ui.checkmark.classList.remove('scale-0'), 50);
                 state.userVerified = true;
-                // 3. Attempt to Start
-                // We wait a moment for visual satisfaction
                 setTimeout(() => {
-                    if (state.playlist.length > 0) {
-                        closeModalAndPlay();
-                    } else {
-                        // Playlist not ready yet (still fetching or failed)
-                    }
+                    if (state.playlist.length > 0) closeModalAndPlay();
                 }, 600); 
             }, 800);
         });
 
-        // --- Helper to Update Play Button UI ---
         function updatePlayButtonUI() {
             if (state.isPlaying) {
                 ui.playBtn.innerHTML = '<i class="fas fa-pause text-5xl md:text-7xl drop-shadow-md"></i>';
                 ui.playBtn.classList.add('scale-90');
-                // Move neighbors closer
                 ui.prevBtn.classList.add('translate-x-2', 'md:translate-x-2');
                 ui.nextBtn.classList.add('-translate-x-2', 'md:-translate-x-2');
             } else {
                 ui.playBtn.innerHTML = '<i class="fas fa-play text-5xl md:text-7xl ml-2 drop-shadow-md"></i>';
                 ui.playBtn.classList.remove('scale-90');
-                // Reset neighbors
                 ui.prevBtn.classList.remove('translate-x-2', 'md:translate-x-2');
                 ui.nextBtn.classList.remove('-translate-x-2', 'md:-translate-x-2');
             }
@@ -356,15 +388,12 @@
             state.isPlaying = true;
             updatePlayButtonUI();
             
-            // If we haven't loaded the track src yet, loadTrack(0) handles it.
-            // If src is already set, just play.
             if(!ui.audio.src || ui.audio.src === window.location.href) {
                 loadTrack(0);
             } else {
                 playWithFade();
             }
             
-            // Initialize Audio Context on user interaction
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             }
@@ -372,69 +401,69 @@
                 audioCtx.resume();
             }
         }
+
         async function initPlayer() {
-            // Remove local loadedFiles array, push directly to state.playlist
-            let fetchFailed = false;
             let firstFileLoaded = false;
+            const validFiles = [];
+            
+            // Streaming Optimization:
+            // Instead of fetching the whole blob (downloading entire file), we just check existence
+            // and create a playlist of URLs. This allows the browser to stream/seek immediately.
             for (const fileName of config.files) {
+                const path = `${config.folder}/${fileName}`;
                 try {
-                    const path = `${config.folder}/${fileName}`;
-                    const response = await fetch(path);
-                    
+                    // HEAD request to check existence and get type without download
+                    const response = await fetch(path, { method: 'HEAD' });
                     if (response.ok) {
-                        const blob = await response.blob();
-                        blob.name = fileName; 
-                        
-                        // Push directly to state playlist
-                        state.playlist.push(blob);
-                        // If this is the first file, unlock the UI immediately
-                        if (!firstFileLoaded) {
-                            firstFileLoaded = true;
-                            
-                            // Initialize player with this first track
-                            setupPlayerAfterLoad();
-                            
-                            // If user verified (unlikely this fast, but good for safety)
-                            if(state.userVerified) {
-                                closeModalAndPlay();
-                            }
-                        } else {
-                            // For subsequent files, just refresh the playlist list in the UI
-                            renderPlaylist();
-                        }
-                    } else {
-                        console.warn(`Could not load ${fileName}`);
+                        validFiles.push({
+                            name: fileName,
+                            url: path,
+                            type: response.headers.get('content-type') || ''
+                        });
                     }
-                } catch (error) {
-                    console.error(`Error fetching ${fileName}:`, error);
-                    fetchFailed = true;
+                } catch (e) {
+                    // If HEAD fails (e.g. static host block), assumes file exists based on config
+                    console.warn(`Cannot verify ${fileName}, assuming it exists.`);
+                    validFiles.push({
+                         name: fileName,
+                         url: path,
+                         type: '' // Will infer from extension
+                    });
                 }
             }
-            // If loop finishes and nothing loaded
-            if (!firstFileLoaded) {
-                ui.loadingSpinner.classList.add('hidden');
-                ui.fallbackSelector.classList.remove('hidden');
-                ui.titleDesktop.innerText = "Select Files";
-                ui.artistDesktop.innerText = "Automatic loading blocked by browser.";
+            
+            if (validFiles.length > 0) {
+                state.playlist = validFiles;
+                setupPlayerAfterLoad();
+                // Note: We don't auto-close modal here because we want user verification
+            } else {
+                 // Only show fallback if config files completely failed
+                 ui.loadingSpinner.classList.add('hidden');
+                 ui.fallbackSelector.classList.remove('hidden');
+                 ui.titleDesktop.innerText = "Select Files";
+                 ui.artistDesktop.innerText = "No files found in configuration.";
             }
         }
+
         function setupPlayerAfterLoad() {
             renderPlaylist();
-            // Pre-load metadata for first track (don't play yet)
             loadTrack(0, false); 
         }
-        // --- Core Player Logic ---
+
         function renderPlaylist() {
             ui.playlistItems.innerHTML = '';
             state.playlist.forEach((file, index) => {
                 const div = document.createElement('div');
                 div.className = `p-3 rounded-lg cursor-pointer hover:bg-white/10 transition flex items-center gap-3 group ${index === state.currentIndex ? 'bg-white/20' : ''}`;
+                // Handle both File object (manual) and our URL object (auto)
+                const name = file.name; 
+                
                 div.innerHTML = `
                     <div class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-xs text-white/50 group-hover:text-white">
                         ${index + 1}
                     </div>
                     <div class="overflow-hidden">
-                        <div class="truncate font-medium text-sm">${file.name.replace(/\.mp3$/i, '')}</div>
+                        <div class="truncate font-medium text-sm">${name.replace(/\.(mp3|mp4|webm|ogg)$/i, '')}</div>
                     </div>
                 `;
                 div.onclick = () => {
@@ -447,113 +476,217 @@
                 ui.playlistItems.appendChild(div);
             });
         }
+
         function loadTrack(index, autoPlay = true) {
             if (!state.playlist[index]) return;
             
             const file = state.playlist[index];
-            const url = URL.createObjectURL(file);
             
-            // Only reset src if it's different (prevents reload loop on pause/play)
+            // Determine if it's a Blob (manual select) or URL (config)
+            const isBlob = file instanceof File || file instanceof Blob;
+            const url = isBlob ? URL.createObjectURL(file) : file.url;
+            const fileName = file.name;
+            
+            // Check if video
+            const type = file.type || '';
+            const isVideo = type.startsWith('video/') || fileName.match(/\.(mp4|webm|ogg|mov)$/i);
+            
             if(ui.audio.src !== url) {
                 ui.audio.src = url;
                 ui.audio.load();
             }
+
+            if (isVideo) {
+                ui.audio.classList.remove('hidden');
+                ui.art.classList.add('hidden');
+                ui.fullscreenBtn.classList.remove('hidden'); // Show fullscreen btn
+                
+                // --- Video Layout: Move Controls Below Video ---
+                // Move Controls to Left Column
+                if (ui.controlsWrapper.parentElement !== ui.leftColumn) {
+                     ui.leftColumn.appendChild(ui.controlsWrapper);
+                }
+                
+                // Adjust Left Column: Full Width, Remove Padding, Full Height
+                ui.leftColumn.classList.remove('md:w-5/12', 'lg:w-4/12', 'md:p-4', 'h-[70%]');
+                ui.leftColumn.classList.add('md:w-full', 'md:p-0', 'h-full');
+                
+                // Adjust Right Column: Hide
+                ui.rightColumn.classList.add('hidden');
+                
+                // Adjust Visual Wrapper Alignment
+                ui.visualWrapper.classList.add('md:justify-center');
+                
+                // Adjust Video Container: 75% width, keep rounded corners
+                ui.visualContainer.classList.remove('md:w-[96%]', 'aspect-square'); 
+                ui.visualContainer.classList.add('md:w-[75%]', 'md:max-h-[65vh]'); 
+                
+                // Handle Aspect Ratio Logic
+                ui.visualContainer.style.aspectRatio = "16/9"; // Default start ratio
+                
+                const updateRatio = () => {
+                    if(ui.audio.videoWidth && ui.audio.videoHeight) {
+                        ui.visualContainer.style.aspectRatio = `${ui.audio.videoWidth}/${ui.audio.videoHeight}`;
+                    }
+                };
+                
+                if (ui.audio.readyState >= 1) {
+                    updateRatio();
+                }
+                ui.audio.onloadedmetadata = updateRatio;
+
+            } else {
+                ui.audio.classList.add('hidden');
+                ui.art.classList.remove('hidden');
+                ui.fullscreenBtn.classList.add('hidden'); // Hide fullscreen btn
+                
+                // --- Audio Layout: Reset ---
+                // Move Controls Back
+                if (ui.controlsWrapper.parentElement !== ui.rightColumn) {
+                     ui.rightColumn.appendChild(ui.controlsWrapper);
+                }
+                
+                // Reset Left Column
+                ui.leftColumn.classList.add('md:w-5/12', 'lg:w-4/12', 'md:p-4', 'h-[70%]');
+                ui.leftColumn.classList.remove('md:w-full', 'md:p-0', 'h-full');
+                
+                // Reset Right Column
+                ui.rightColumn.classList.remove('hidden');
+                
+                ui.visualWrapper.classList.remove('md:justify-center');
+                
+                ui.visualContainer.classList.add('md:w-[96%]', 'aspect-square');
+                ui.visualContainer.classList.remove('md:w-[75%]', 'md:max-h-[65vh]');
+
+                // Reset to square for album art
+                ui.visualContainer.style.aspectRatio = "";
+                ui.audio.onloadedmetadata = null;
+            }
             
-            // Reset UI Time
+            // Ensure canvas resizes correctly after DOM move
+            setTimeout(() => { resizeCanvas(); drawWaveform(); }, 50);
+            
             if(autoPlay) {
                  ui.currentTime.innerText = "0:00";
                  ui.totalDuration.innerText = "0:00";
             }
-            // Update Active Playlist Item
+            
             Array.from(ui.playlistItems.children).forEach((child, i) => {
                 if (i === index) child.classList.add('bg-white/20');
                 else child.classList.remove('bg-white/20');
             });
             
-            const defaultTitle = file.name.replace(/\.mp3$/i, '');
+            const defaultTitle = fileName.replace(/\.(mp3|mp4|webm|ogg)$/i, '');
             
-            // Read ID3 Tags
-            new jsmediatags.Reader(file)
-                .setTagsToRead(["title", "artist", "album", "picture"])
-                .read({
-                    onSuccess: (tag) => {
-                        const tags = tag.tags;
-                        let pictureUrl = null;
-                        if (tags.picture) {
-                            const { data, format } = tags.picture;
-                            let base64String = "";
-                            for (let i = 0; i < data.length; i++) {
-                                base64String += String.fromCharCode(data[i]);
+            updateMetadataUI({
+                title: defaultTitle,
+                artist: isVideo ? "Video" : "Unknown Artist",
+                album: isVideo ? "Local Video" : "Unknown Album",
+                picture: null
+            });
+
+            // Function to read tags from a source (Blob)
+            const readTags = (source) => {
+                new jsmediatags.Reader(source)
+                    .setTagsToRead(["title", "artist", "album", "picture"])
+                    .read({
+                        onSuccess: (tag) => {
+                            const tags = tag.tags;
+                            let pictureUrl = null;
+                            if (tags.picture) {
+                                const { data, format } = tags.picture;
+                                let base64String = "";
+                                for (let i = 0; i < data.length; i++) {
+                                    base64String += String.fromCharCode(data[i]);
+                                }
+                                pictureUrl = `data:${format};base64,${window.btoa(base64String)}`;
                             }
-                            pictureUrl = `data:${format};base64,${window.btoa(base64String)}`;
-                        }
-                        updateMetadataUI({
-                            title: tags.title || defaultTitle,
-                            artist: tags.artist || "Unknown Artist",
-                            album: tags.album || "Unknown Album",
-                            picture: pictureUrl
-                        });
-                    },
-                    onError: (error) => {
-                         updateMetadataUI({
-                            title: defaultTitle,
-                            artist: "Unknown Artist",
-                            album: "Unknown Album",
-                            picture: null
-                        });
-                    }
-                });
-            // GENERATE REAL WAVEFORM
-            processAudioForWaveform(file);
+                            updateMetadataUI({
+                                title: tags.title || defaultTitle,
+                                artist: tags.artist || "Unknown Artist",
+                                album: tags.album || "Unknown Album",
+                                picture: pictureUrl
+                            });
+                        },
+                        onError: (error) => { console.warn("ID3 Tag Read Error:", error); }
+                    });
+            };
+
+            // Attempt ID3 tags: If Blob, read directly. If URL, fetch Blob first.
+            if (!isVideo) {
+                if (isBlob) {
+                    readTags(file);
+                } else {
+                    // Fetch remote/local URL as blob to ensure jsmediatags can read it
+                    fetch(url)
+                        .then(res => {
+                            if (!res.ok) throw new Error("Network response was not ok");
+                            return res.blob();
+                        })
+                        .then(blob => readTags(blob))
+                        .catch(err => console.warn("Failed to fetch file for tags:", err));
+                }
+            }
+
+            // For remote files, we skip heavy waveform processing to save bandwidth
+            // unless it's a local blob.
+            processAudioForWaveform(file, isVideo);
             
             if (autoPlay && state.isPlaying) {
                 playWithFade();
             }
         }
-        async function processAudioForWaveform(fileBlob) {
-             // Use a temporary placeholder while processing
-             // Flat line
-             state.waveform = new Array(200).fill(0.1);
-             drawWaveform();
+
+        async function processAudioForWaveform(file, isVideo) {
+             // If video, use random to avoid heavy downloads. 
+             // For audio (local or remote), we try to fetch and decode to get real waveform.
+             if (isVideo) {
+                 generateRandomWaveform();
+                 if (!state.userVerified) {
+                     ui.loadingSpinner.classList.add('hidden');
+                     ui.recaptchaWidget.classList.remove('hidden');
+                 }
+                 return;
+             }
+
              try {
+                // Need to fetch the array buffer
+                let arrayBuffer;
+                
+                if (file instanceof File || file instanceof Blob) {
+                    arrayBuffer = await file.arrayBuffer();
+                } else if (file.url) {
+                    // Fetch remote file
+                    const response = await fetch(file.url);
+                    if (!response.ok) throw new Error("Network response error");
+                    arrayBuffer = await response.arrayBuffer();
+                } else {
+                     throw new Error("Unknown file source");
+                }
+
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 
-                const arrayBuffer = await fileBlob.arrayBuffer();
-                // We need to decode the audio data to get the raw PCM samples
                 const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-                
-                // Get the Left channel data (usually channel 0)
                 const rawData = audioBuffer.getChannelData(0); 
-                const samples = 200; // Number of bars we want to display
+                const samples = 200;
                 const blockSize = Math.floor(rawData.length / samples);
                 const waveform = [];
                 
-                // Calculate average amplitude for each block
                 for (let i = 0; i < samples; i++) {
                     let sum = 0;
                     for (let j = 0; j < blockSize; j++) {
-                        // Use Math.abs because audio signal goes from -1 to 1
                         sum += Math.abs(rawData[i * blockSize + j]);
                     }
-                    // Average amplitude for this block
-                    let avg = sum / blockSize; 
-                    waveform.push(avg);
+                    waveform.push(sum / blockSize);
                 }
                 
-                // Normalize the data (scale it so the loudest part is 1.0)
-                const maxVal = Math.max(...waveform) || 1; // Avoid divide by zero
-                state.waveform = waveform.map(v => {
-                    // Scale and ensure a minimum height of 0.1 for visibility
-                    return Math.max(0.1, (v / maxVal)); 
-                });
-                
-                // Add padding to start and end for the scrolling effect logic
+                const maxVal = Math.max(...waveform) || 1;
+                state.waveform = waveform.map(v => Math.max(0.1, (v / maxVal)));
                 state.waveform = [0.1, 0.1, 0.1, ...state.waveform, 0.1, 0.1, 0.1];
                 
                 drawWaveform();
              } catch (e) {
-                 console.error("Error generating real waveform:", e);
-                 // Fallback to random if decoding fails
+                 console.warn("Waveform generation failed (using random):", e);
                  generateRandomWaveform();
              } finally {
                  if (!state.userVerified) {
@@ -674,7 +807,14 @@
                 ctx.scale(dpr, dpr);
             }
         }
-        window.addEventListener('resize', () => { resizeCanvas(); drawWaveform(); });
+        // Replaced window.resize with ResizeObserver for robust layout changes (e.g. video toggle)
+        const resizeObserver = new ResizeObserver(() => {
+             resizeCanvas();
+             drawWaveform();
+        });
+        if (ui.canvas.parentElement) {
+            resizeObserver.observe(ui.canvas.parentElement);
+        }
         
         // --- Dragging / Seeking Logic ---
         let dragLastX = 0;

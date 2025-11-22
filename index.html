@@ -56,7 +56,7 @@
         #waveform-container {
             position: relative;
             width: 100%;
-            height: 280px; /* Slightly smaller height */
+            height: 100%; /* Fits parent */
             overflow: hidden;
             mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
             -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
@@ -117,58 +117,64 @@
     </div>
     <div id="app-container" class="relative z-10 w-full h-full flex flex-col md:flex-row overflow-hidden">
         
-        <!-- Top Section (Mobile): Adjusted height from 55% to 45% to pull text up -->
-        <div class="w-full md:w-5/12 lg:w-4/12 h-[45%] md:h-full p-2 md:p-4 flex flex-col relative">
+        <!-- Top Section (Mobile): Increased height to 70%, reduced padding to p-2 -->
+        <div class="w-full md:w-5/12 lg:w-4/12 h-[70%] md:h-full p-2 md:p-4 flex flex-col relative">
             <div class="flex justify-between items-center mb-2 md:absolute md:top-4 md:left-4 md:right-4 md:z-20 px-2 md:px-0">
                 <button id="btn-playlist-toggle" class="p-2 text-white/70 hover:text-white transition"><i class="fas fa-bars text-xl"></i></button>
                 <span class="text-xs font-bold tracking-widest uppercase text-white/50">Now Playing</span>
                 <button class="p-2 text-white/70 hover:text-white transition"><i class="fas fa-ellipsis-v"></i></button>
             </div>
-            <div class="flex-1 flex items-center justify-center relative w-full h-full">
-                <div class="relative aspect-square w-auto h-[96%] md:h-auto md:w-[96%] max-h-[90vh] shadow-2xl rounded-2xl overflow-hidden group">
+            <div class="flex-1 flex items-center justify-center relative w-full h-full overflow-hidden">
+                <!-- w-full on mobile to maximize width (and thus height) -->
+                <div class="relative aspect-square w-full h-auto max-h-full max-w-full md:h-auto md:w-[96%] md:max-h-[90vh] shadow-2xl rounded-2xl overflow-hidden group">
                     <img id="album-art" src="https://via.placeholder.com/500?text=Loading..." alt="Album Art" class="w-full h-full object-cover">
                     <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-50"></div>
                 </div>
             </div>
-            <div class="md:hidden mt-2 text-center">
+            <div class="md:hidden mt-3 text-center">
                 <h2 id="track-title-mobile" class="text-2xl font-bold truncate px-4">Loading...</h2>
                 <p id="track-artist-mobile" class="text-white/60 text-sm mt-1 truncate px-4">Please wait</p>
             </div>
         </div>
-        <!-- Bottom Section (Mobile): Adjusted height from 45% to 55% and reduced padding to pb-2 -->
-        <div class="w-full md:w-7/12 lg:w-8/12 h-[55%] md:h-full flex flex-col justify-end pb-2 md:pb-0 md:justify-center relative">
+        <!-- Bottom Section (Mobile): Controls moved up to be closer to art -->
+        <div class="w-full md:w-7/12 lg:w-8/12 h-[30%] md:h-full flex flex-col justify-start pt-2 md:pt-0 md:justify-center relative">
             
             <div class="hidden md:flex flex-col items-start px-12 mb-8 w-full">
                 <span id="track-album-desktop" class="inline-block py-1 px-3 rounded-full bg-white/10 text-xs font-medium mb-4 backdrop-blur-md">Album</span>
                 <h1 id="track-title-desktop" class="text-5xl font-bold leading-tight mb-2 line-clamp-2">Waiting for files...</h1>
                 <p id="track-artist-desktop" class="text-2xl text-white/60">Please ensure files are in 'music' folder</p>
             </div>
-            <div class="relative w-full flex flex-col items-center justify-center mb-4">
+            <div class="relative w-full flex flex-col items-center justify-center mb-2">
                 
-                <div class="relative w-full h-[280px] flex items-center justify-center">
+                <!-- Waveform Height: 140px on mobile (compact), 280px on desktop -->
+                <div class="relative w-full h-[140px] md:h-[280px] flex items-center justify-center group">
                     
-                    <div id="waveform-container" class="absolute inset-0 w-full h-full opacity-80 z-10" style="position: absolute;">
+                    <div id="waveform-container" class="absolute inset-0 w-full h-full opacity-80 z-10">
                         <canvas id="waveform-canvas" class="w-full h-full"></canvas>
                     </div>
-                    <div class="relative z-30 flex items-center justify-center gap-4 pointer-events-none">
-                         <button id="btn-prev" class="pointer-events-auto rounded-full bg-black text-white flex items-center justify-center w-20 h-20 md:w-24 md:h-24">
-                            <i class="fas fa-backward-step text-4xl md:text-5xl"></i>
+                    
+                    <!-- Controls Layer: Absolute inset-0 ensures it sits exactly on top. z-50 ensures top layer. -->
+                    <div class="absolute inset-0 z-50 flex items-center justify-center gap-2 pointer-events-none">
+                        <!-- Prev Button -->
+                         <button id="btn-prev" class="pointer-events-auto rounded-full bg-black text-white flex items-center justify-center w-16 h-16 md:w-24 md:h-24 shadow-2xl border border-white/10">
+                            <i class="fas fa-backward-step text-3xl md:text-5xl drop-shadow-md"></i>
                          </button>
                         
-                        <button id="btn-play" class="pointer-events-auto w-28 h-28 md:w-32 md:h-32 rounded-full bg-black text-white flex items-center justify-center">
-                            <i class="fas fa-play text-6xl md:text-7xl ml-1"></i>
+                        <!-- Play Button (Added transitions) -->
+                        <button id="btn-play" class="pointer-events-auto w-24 h-24 md:w-32 md:h-32 rounded-full bg-black text-white flex items-center justify-center shadow-2xl border border-white/10 transition-transform duration-300 ease-out">
+                            <i class="fas fa-play text-5xl md:text-7xl ml-2 drop-shadow-md"></i>
                         </button>
                         
-                        <button id="btn-next" class="pointer-events-auto rounded-full bg-black text-white flex items-center justify-center w-20 h-20 md:w-24 md:h-24">
-                            <i class="fas fa-forward-step text-4xl md:text-5xl"></i>
+                        <!-- Next Button -->
+                        <button id="btn-next" class="pointer-events-auto rounded-full bg-black text-white flex items-center justify-center w-16 h-16 md:w-24 md:h-24 shadow-2xl border border-white/10">
+                            <i class="fas fa-forward-step text-3xl md:text-5xl drop-shadow-md"></i>
                         </button>
                     </div>
                 </div>
-                <div class="w-full px-8 md:px-12 flex justify-between text-xs font-mono text-white/50 mt-2 z-20">
+                <div class="w-full px-6 md:px-12 flex justify-between text-xs font-mono text-white/50 mt-1 z-20">
                     <span id="current-time">0:00</span>
                     <span id="total-duration">0:00</span>
                 </div>
-                <!-- Removed Shuffle and Repeat buttons container -->
             </div>
         </div>
         <div id="playlist-panel" class="absolute inset-y-0 left-0 w-full md:w-80 bg-black/90 backdrop-blur-xl transform -translate-x-full transition-transform duration-300 z-40 border-r border-white/10">
@@ -253,6 +259,9 @@
                 // If user already verified, just close modal and play
                 if(state.userVerified) {
                     closeModalAndPlay();
+                } else {
+                    // Show captcha if not verified
+                    ui.recaptchaWidget.classList.remove('hidden');
                 }
             }
         });
@@ -283,11 +292,22 @@
                 }, 600); 
             }, 800);
         });
+
+        // --- Helper to Update Play Button UI ---
+        function updatePlayButtonUI() {
+            if (state.isPlaying) {
+                ui.playBtn.innerHTML = '<i class="fas fa-pause text-5xl md:text-7xl drop-shadow-md"></i>';
+                ui.playBtn.classList.add('scale-90');
+            } else {
+                ui.playBtn.innerHTML = '<i class="fas fa-play text-5xl md:text-7xl ml-2 drop-shadow-md"></i>';
+                ui.playBtn.classList.remove('scale-90');
+            }
+        }
+
         function closeModalAndPlay() {
             ui.startModal.classList.add('opacity-0', 'pointer-events-none');
             state.isPlaying = true;
-            // UPDATED ICON SIZE (Mobile: text-6xl)
-            ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
+            updatePlayButtonUI();
             
             // If we haven't loaded the track src yet, loadTrack(0) handles it.
             // If src is already set, just play.
@@ -378,8 +398,7 @@
                 div.onclick = () => {
                     state.currentIndex = index;
                     state.isPlaying = true;
-                    // UPDATED ICON SIZE (Mobile: text-6xl)
-                    ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
+                    updatePlayButtonUI();
                     loadTrack(index);
                     if(window.innerWidth < 768) ui.playlistPanel.classList.add('-translate-x-full');
                 };
@@ -449,8 +468,7 @@
                 ui.audio.play().catch(e => {
                     console.warn("Autoplay blocked:", e);
                     state.isPlaying = false;
-                    // UPDATED ICON SIZE (Mobile: text-6xl)
-                    ui.playBtn.innerHTML = '<i class="fas fa-play text-6xl md:text-7xl ml-1"></i>';
+                    updatePlayButtonUI();
                 });
             }
         }
@@ -534,20 +552,16 @@
             if (ui.audio.paused) {
                 ui.audio.play();
                 state.isPlaying = true;
-                // UPDATED ICON SIZE (Mobile: text-6xl)
-                ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
             } else {
                 ui.audio.pause();
                 state.isPlaying = false;
-                // UPDATED ICON SIZE (Mobile: text-6xl)
-                ui.playBtn.innerHTML = '<i class="fas fa-play text-6xl md:text-7xl ml-1"></i>';
             }
+            updatePlayButtonUI();
         });
         ui.prevBtn.addEventListener('click', () => {
             state.currentIndex = (state.currentIndex - 1 + state.playlist.length) % state.playlist.length;
             state.isPlaying = true;
-            // UPDATED ICON SIZE (Mobile: text-6xl)
-            ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
+            updatePlayButtonUI();
             loadTrack(state.currentIndex);
         });
         ui.nextBtn.addEventListener('click', () => {
@@ -557,8 +571,7 @@
                 state.currentIndex = (state.currentIndex + 1) % state.playlist.length;
             }
             state.isPlaying = true;
-            // UPDATED ICON SIZE (Mobile: text-6xl)
-            ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
+            updatePlayButtonUI();
             loadTrack(state.currentIndex);
         });
         ui.playlistToggle.addEventListener('click', () => ui.playlistPanel.classList.remove('-translate-x-full'));

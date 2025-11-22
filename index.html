@@ -447,130 +447,119 @@
                 ui.playlistItems.appendChild(div);
             });
         }
-        // Add loadId to state to track active loading request
-        state.loadId = 0;
-
-        async function loadTrack(index, autoPlay = true) {
+        function loadTrack(index, autoPlay = true) {
             if (!state.playlist[index]) return;
             
-            const currentLoadId = Date.now();
-            state.loadId = currentLoadId;
-
             const file = state.playlist[index];
+            const url = URL.createObjectURL(file);
             
-            // Fetch Data in Parallel
-            const metadataPromise = new Promise((resolve) => {
-                 new jsmediatags.Reader(file)
-                    .setTagsToRead(["title", "artist", "album", "picture"])
-                    .read({
-                        onSuccess: (tag) => resolve(tag.tags),
-                        onError: (error) => resolve(null)
-                    });
+            // Only reset src if it's different (prevents reload loop on pause/play)
+            if(ui.audio.src !== url) {
+                ui.audio.src = url;
+                ui.audio.load();
+            }
+            
+            // Reset UI Time
+            if(autoPlay) {
+                 ui.currentTime.innerText = "0:00";
+                 ui.totalDuration.innerText = "0:00";
+            }
+            // Update Active Playlist Item
+            Array.from(ui.playlistItems.children).forEach((child, i) => {
+                if (i === index) child.classList.add('bg-white/20');
+                else child.classList.remove('bg-white/20');
             });
             
-            const waveformPromise = getWaveformData(file);
-
-            try {
-                const [tags, waveform] = await Promise.all([metadataPromise, waveformPromise]);
-                
-                // If user switched song again, ignore this result
-                if (state.loadId !== currentLoadId) return;
-
-                // --- Apply Changes ---
-
-                const url = URL.createObjectURL(file);
-                if(ui.audio.src !== url) {
-                    ui.audio.src = url;
-                    ui.audio.load();
-                }
-                
-                if(autoPlay) {
-                     ui.currentTime.innerText = "0:00";
-                     ui.totalDuration.innerText = "0:00";
-                }
-                
-                // Update Playlist Highlight
-                Array.from(ui.playlistItems.children).forEach((child, i) => {
-                    if (i === index) child.classList.add('bg-white/20');
-                    else child.classList.remove('bg-white/20');
-                });
-                
-                // Update Metadata
-                const defaultTitle = file.name.replace(/\.mp3$/i, '');
-                let pictureUrl = null;
-                if (tags && tags.picture) {
-                    const { data, format } = tags.picture;
-                    let base64String = "";
-                    for (let i = 0; i < data.length; i++) {
-                        base64String += String.fromCharCode(data[i]);
+            const defaultTitle = file.name.replace(/\.mp3$/i, '');
+            
+            // Read ID3 Tags
+            new jsmediatags.Reader(file)
+                .setTagsToRead(["title", "artist", "album", "picture"])
+                .read({
+                    onSuccess: (tag) => {
+                        const tags = tag.tags;
+                        let pictureUrl = null;
+                        if (tags.picture) {
+                            const { data, format } = tags.picture;
+                            let base64String = "";
+                            for (let i = 0; i < data.length; i++) {
+                                base64String += String.fromCharCode(data[i]);
+                            }
+                            pictureUrl = `data:${format};base64,${window.btoa(base64String)}`;
+                        }
+                        updateMetadataUI({
+                            title: tags.title || defaultTitle,
+                            artist: tags.artist || "Unknown Artist",
+                            album: tags.album || "Unknown Album",
+                            picture: pictureUrl
+                        });
+                    },
+                    onError: (error) => {
+                         updateMetadataUI({
+                            title: defaultTitle,
+                            artist: "Unknown Artist",
+                            album: "Unknown Album",
+                            picture: null
+                        });
                     }
-                    pictureUrl = `data:${format};base64,${window.btoa(base64String)}`;
-                }
-                
-                updateMetadataUI({
-                    title: (tags && tags.title) || defaultTitle,
-                    artist: (tags && tags.artist) || "Unknown Artist",
-                    album: (tags && tags.album) || "Unknown Album",
-                    picture: pictureUrl
                 });
-                
-                // Update Waveform
-                state.waveform = waveform;
-                drawWaveform();
-                
-                // Ensure verification UI is handled (legacy check)
-                if (!state.userVerified) {
-                     ui.loadingSpinner.classList.add('hidden');
-                     ui.recaptchaWidget.classList.remove('hidden');
-                }
-
-                if (autoPlay && state.isPlaying) {
-                    playWithFade();
-                }
-            } catch (e) {
-                console.error("Load track error", e);
+            // GENERATE REAL WAVEFORM
+            processAudioForWaveform(file);
+            
+            if (autoPlay && state.isPlaying) {
+                playWithFade();
             }
         }
-
-        async function getWaveformData(fileBlob) {
+        async function processAudioForWaveform(fileBlob) {
+             // Use a temporary placeholder while processing
+             // Flat line
+             state.waveform = new Array(200).fill(0.1);
+             drawWaveform();
              try {
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 
                 const arrayBuffer = await fileBlob.arrayBuffer();
+                // We need to decode the audio data to get the raw PCM samples
                 const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
                 
+                // Get the Left channel data (usually channel 0)
                 const rawData = audioBuffer.getChannelData(0); 
-                const samples = 200; 
+                const samples = 200; // Number of bars we want to display
                 const blockSize = Math.floor(rawData.length / samples);
                 const waveform = [];
                 
+                // Calculate average amplitude for each block
                 for (let i = 0; i < samples; i++) {
                     let sum = 0;
                     for (let j = 0; j < blockSize; j++) {
+                        // Use Math.abs because audio signal goes from -1 to 1
                         sum += Math.abs(rawData[i * blockSize + j]);
                     }
+                    // Average amplitude for this block
                     let avg = sum / blockSize; 
                     waveform.push(avg);
                 }
                 
-                const maxVal = Math.max(...waveform) || 1; 
-                const normalized = waveform.map(v => Math.max(0.1, (v / maxVal)));
+                // Normalize the data (scale it so the loudest part is 1.0)
+                const maxVal = Math.max(...waveform) || 1; // Avoid divide by zero
+                state.waveform = waveform.map(v => {
+                    // Scale and ensure a minimum height of 0.1 for visibility
+                    return Math.max(0.1, (v / maxVal)); 
+                });
                 
-                return [0.1, 0.1, 0.1, ...normalized, 0.1, 0.1, 0.1];
+                // Add padding to start and end for the scrolling effect logic
+                state.waveform = [0.1, 0.1, 0.1, ...state.waveform, 0.1, 0.1, 0.1];
+                
+                drawWaveform();
              } catch (e) {
-                 console.error("Error generating waveform:", e);
-                 // Random fallback
-                const bars = 200; 
-                const w = [];
-                let lastVal = 0.5;
-                for(let i=0; i<bars; i++) {
-                    let change = (Math.random() - 0.5) * 0.4;
-                    let val = lastVal + change;
-                    val = Math.max(0.1, Math.min(1.0, val));
-                    w.push(val);
-                    lastVal = val;
-                }
-                return [0.1, 0.1, 0.1, ...w, 0.1, 0.1, 0.1];
+                 console.error("Error generating real waveform:", e);
+                 // Fallback to random if decoding fails
+                 generateRandomWaveform();
+             } finally {
+                 if (!state.userVerified) {
+                     ui.loadingSpinner.classList.add('hidden');
+                     ui.recaptchaWidget.classList.remove('hidden');
+                 }
              }
         }
         function updateMetadataUI(data) {

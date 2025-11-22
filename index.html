@@ -117,7 +117,7 @@
 
         <div id="fallback-selector" class="hidden mt-8 bg-white/10 backdrop-blur-md p-6 rounded-xl border border-white/20 text-center max-w-sm animate-pulse">
             <p class="text-sm mb-4 text-red-300 font-semibold"><i class="fas fa-exclamation-triangle mr-2"></i>Auto-load failed</p>
-            <p class="text-xs text-gray-300 mb-4">Browser security blocked local folder access. Please select your files manually.</p>
+            <p class="text-xs text-gray-300 mb-4">Browser security blocked local folder access or files not found. Please select your files manually.</p>
             <label class="cursor-pointer bg-white text-black px-6 py-3 rounded-full font-bold hover:bg-gray-200 transition block">
                 Select MP3 Files
                 <input type="file" id="manual-file-input" accept=".mp3,audio/mpeg" multiple class="hidden" />
@@ -227,7 +227,8 @@
             isRepeat: false,
             waveform: [], 
             themeColor: [20, 20, 30],
-            userVerified: false // Tracks if user clicked reCAPTCHA
+            userVerified: false, // Tracks if user clicked reCAPTCHA
+            abortController: null
         };
 
         // Global Audio Context
@@ -274,7 +275,14 @@
         ui.manualFileInput.addEventListener('change', (e) => {
             const files = Array.from(e.target.files).filter(f => f.type.startsWith('audio/') || f.name.endsWith('.mp3'));
             if(files.length > 0) {
-                state.playlist = files;
+                // Convert File objects to our internal format
+                state.playlist = files.map(f => ({
+                    name: f.name,
+                    url: URL.createObjectURL(f),
+                    blob: f, // We have the blob immediately for manual files
+                    isManual: true
+                }));
+                
                 setupPlayerAfterLoad();
                 ui.fallbackSelector.style.display = 'none';
                 // If user already verified, just close modal and play
@@ -304,12 +312,9 @@
                 state.userVerified = true;
 
                 // 3. Attempt to Start
-                // We wait a moment for visual satisfaction
                 setTimeout(() => {
                     if (state.playlist.length > 0) {
                         closeModalAndPlay();
-                    } else {
-                        // Playlist not ready yet (still fetching or failed)
                     }
                 }, 600); 
             }, 800);
@@ -318,18 +323,14 @@
         function closeModalAndPlay() {
             ui.startModal.classList.add('opacity-0', 'pointer-events-none');
             state.isPlaying = true;
-            // UPDATED ICON SIZE (Mobile: text-6xl)
             ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
             
-            // If we haven't loaded the track src yet, loadTrack(0) handles it.
-            // If src is already set, just play.
             if(!ui.audio.src || ui.audio.src === window.location.href) {
                 loadTrack(0);
             } else {
                 ui.audio.play().catch(e => console.log("Play prevented:", e));
             }
             
-            // Initialize Audio Context on user interaction
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             }
@@ -339,64 +340,31 @@
         }
 
         async function initPlayer() {
-            // Remove local loadedFiles array, push directly to state.playlist
-            let fetchFailed = false;
-            let firstFileLoaded = false;
-
+            // Instant load: just register URLs
             for (const fileName of config.files) {
-                try {
-                    const path = `${config.folder}/${fileName}`;
-                    const response = await fetch(path);
-                    
-                    if (response.ok) {
-                        const blob = await response.blob();
-                        blob.name = fileName; 
-                        
-                        // Push directly to state playlist
-                        state.playlist.push(blob);
-
-                        // If this is the first file, unlock the UI immediately
-                        if (!firstFileLoaded) {
-                            firstFileLoaded = true;
-                            
-                            // Hide loading spinner
-                            ui.loadingSpinner.classList.add('hidden');
-                            
-                            // Initialize player with this first track
-                            setupPlayerAfterLoad();
-                            
-                            // Show the captcha widget immediately
-                            ui.recaptchaWidget.classList.remove('hidden');
-
-                            // If user verified (unlikely this fast, but good for safety)
-                            if(state.userVerified) {
-                                closeModalAndPlay();
-                            }
-                        } else {
-                            // For subsequent files, just refresh the playlist list in the UI
-                            renderPlaylist();
-                        }
-                    } else {
-                        console.warn(`Could not load ${fileName}`);
-                    }
-                } catch (error) {
-                    console.error(`Error fetching ${fileName}:`, error);
-                    fetchFailed = true;
-                }
+                const path = `${config.folder}/${fileName}`;
+                state.playlist.push({
+                    name: fileName,
+                    url: path,
+                    blob: null, // Will fetch on demand
+                    isManual: false
+                });
             }
 
-            // If loop finishes and nothing loaded
-            if (!firstFileLoaded) {
-                ui.loadingSpinner.classList.add('hidden');
+            ui.loadingSpinner.classList.add('hidden');
+            
+            if (state.playlist.length > 0) {
+                setupPlayerAfterLoad();
+                ui.recaptchaWidget.classList.remove('hidden');
+            } else {
                 ui.fallbackSelector.classList.remove('hidden');
                 ui.titleDesktop.innerText = "Select Files";
-                ui.artistDesktop.innerText = "Automatic loading blocked by browser.";
+                ui.artistDesktop.innerText = "Automatic loading blocked by browser or no files.";
             }
         }
 
         function setupPlayerAfterLoad() {
             renderPlaylist();
-            // Pre-load metadata for first track (don't play yet)
             loadTrack(0, false); 
         }
 
@@ -404,7 +372,7 @@
 
         function renderPlaylist() {
             ui.playlistItems.innerHTML = '';
-            state.playlist.forEach((file, index) => {
+            state.playlist.forEach((item, index) => {
                 const div = document.createElement('div');
                 div.className = `p-3 rounded-lg cursor-pointer hover:bg-white/10 transition flex items-center gap-3 group ${index === state.currentIndex ? 'bg-white/20' : ''}`;
                 div.innerHTML = `
@@ -412,13 +380,12 @@
                         ${index + 1}
                     </div>
                     <div class="overflow-hidden">
-                        <div class="truncate font-medium text-sm">${file.name.replace(/\.mp3$/i, '')}</div>
+                        <div class="truncate font-medium text-sm">${item.name.replace(/\.mp3$/i, '')}</div>
                     </div>
                 `;
                 div.onclick = () => {
                     state.currentIndex = index;
                     state.isPlaying = true;
-                    // UPDATED ICON SIZE (Mobile: text-6xl)
                     ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
                     loadTrack(index);
                     if(window.innerWidth < 768) ui.playlistPanel.classList.add('-translate-x-full');
@@ -430,38 +397,84 @@
         function loadTrack(index, autoPlay = true) {
             if (!state.playlist[index]) return;
             
-            const file = state.playlist[index];
-            const url = URL.createObjectURL(file);
+            const item = state.playlist[index];
             
-            // Only reset src if it's different (prevents reload loop on pause/play)
-            if(ui.audio.src !== url) {
-                ui.audio.src = url;
+            // Abort previous background fetch if it's running
+            if(state.abortController) {
+                state.abortController.abort();
+            }
+            state.abortController = new AbortController();
+
+            // Streaming URL
+            const srcUrl = item.url;
+            
+            if(ui.audio.src !== srcUrl && ui.audio.src !== window.location.origin + "/" + srcUrl) {
+                ui.audio.src = srcUrl;
                 ui.audio.load();
             }
             
-            // Reset UI Time
             if(autoPlay) {
                  ui.currentTime.innerText = "0:00";
                  ui.totalDuration.innerText = "Loading...";
             }
 
-            // Update Active Playlist Item
+            // Highlight Playlist Item
             Array.from(ui.playlistItems.children).forEach((child, i) => {
                 if (i === index) child.classList.add('bg-white/20');
                 else child.classList.remove('bg-white/20');
             });
 
-            // Metadata
-            const defaultTitle = file.name.replace(/\.mp3$/i, '');
+            // Set Default Metadata immediately (instant feel)
+            const defaultTitle = item.name.replace(/\.mp3$/i, '');
             updateMetadataUI({
                 title: defaultTitle,
                 artist: "Unknown Artist",
-                album: "Unknown Album",
+                album: "Loading info...",
                 picture: null
             });
 
-            // Read ID3 Tags
-            new jsmediatags.Reader(file)
+            // Set Placeholder Waveform immediately
+            generateRandomWaveform();
+
+            // Background: Fetch Blob for Metadata & Waveform
+            if(item.blob) {
+                // If we already have the blob, use it
+                extractMetadata(item.blob, defaultTitle);
+                processAudioForWaveform(item.blob);
+            } else {
+                // Fetch in background
+                fetch(item.url, { signal: state.abortController.signal })
+                    .then(response => {
+                        if(!response.ok) throw new Error('Network response was not ok');
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        blob.name = item.name;
+                        item.blob = blob; // Cache it
+                        extractMetadata(blob, defaultTitle);
+                        processAudioForWaveform(blob);
+                    })
+                    .catch(err => {
+                        if (err.name === 'AbortError') {
+                           // console.log('Fetch aborted');
+                        } else {
+                           console.error("Error loading track details:", err);
+                           ui.albumDesktop.innerText = "Streaming only";
+                        }
+                    });
+            }
+            
+            if (autoPlay && state.isPlaying) {
+                ui.audio.play().catch(e => {
+                    console.warn("Autoplay blocked:", e);
+                    state.isPlaying = false;
+                    ui.playBtn.innerHTML = '<i class="fas fa-play text-6xl md:text-7xl ml-1"></i>';
+                });
+            }
+        }
+
+        function extractMetadata(fileBlob, defaultTitle) {
+            new jsmediatags.Reader(fileBlob)
                 .setTagsToRead(["title", "artist", "album", "picture"])
                 .read({
                     onSuccess: (tag) => {
@@ -483,28 +496,16 @@
                         });
                     },
                     onError: (error) => {
-                        if(ui.art.src.includes("placeholder")) updateThemeFromImage(null);
+                         // console.log(error);
                     }
                 });
-
-            // GENERATE REAL WAVEFORM
-            processAudioForWaveform(file);
-            
-            if (autoPlay && state.isPlaying) {
-                ui.audio.play().catch(e => {
-                    console.warn("Autoplay blocked:", e);
-                    state.isPlaying = false;
-                    // UPDATED ICON SIZE (Mobile: text-6xl)
-                    ui.playBtn.innerHTML = '<i class="fas fa-play text-6xl md:text-7xl ml-1"></i>';
-                });
-            }
         }
 
         async function processAudioForWaveform(fileBlob) {
              // Use a temporary placeholder while processing
              // Flat line
-             state.waveform = new Array(200).fill(0.1);
-             drawWaveform();
+             // state.waveform = new Array(200).fill(0.1);
+             // drawWaveform();
 
              try {
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -576,7 +577,6 @@
                 const rgb = `${color[0]}, ${color[1]}, ${color[2]}`;
                 
                 ui.bgLayer.style.background = `linear-gradient(135deg, rgba(${rgb}, 0.9) 0%, rgba(10,10,10,1) 100%)`;
-                // ui.playBtn.style.boxShadow = `0 0 30px rgba(${rgb}, 0.6)`; // Removed this line
             } catch (e) {}
         }
 
@@ -585,12 +585,10 @@
             if (ui.audio.paused) {
                 ui.audio.play();
                 state.isPlaying = true;
-                // UPDATED ICON SIZE (Mobile: text-6xl)
                 ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
             } else {
                 ui.audio.pause();
                 state.isPlaying = false;
-                // UPDATED ICON SIZE (Mobile: text-6xl)
                 ui.playBtn.innerHTML = '<i class="fas fa-play text-6xl md:text-7xl ml-1"></i>';
             }
         });
@@ -598,7 +596,6 @@
         ui.prevBtn.addEventListener('click', () => {
             state.currentIndex = (state.currentIndex - 1 + state.playlist.length) % state.playlist.length;
             state.isPlaying = true;
-            // UPDATED ICON SIZE (Mobile: text-6xl)
             ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
             loadTrack(state.currentIndex);
         });
@@ -610,7 +607,6 @@
                 state.currentIndex = (state.currentIndex + 1) % state.playlist.length;
             }
             state.isPlaying = true;
-            // UPDATED ICON SIZE (Mobile: text-6xl)
             ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
             loadTrack(state.currentIndex);
         });
@@ -665,11 +661,9 @@
                 const dpr = window.devicePixelRatio || 1;
                 const rect = ui.canvas.parentElement.getBoundingClientRect();
                 
-                // Set actual size in memory (scaled to account for extra pixel density)
                 ui.canvas.width = rect.width * dpr;
                 ui.canvas.height = rect.height * dpr;
                 
-                // Normalize coordinate system to use css pixels
                 ui.canvas.style.width = `${rect.width}px`;
                 ui.canvas.style.height = `${rect.height}px`;
                 
@@ -680,7 +674,6 @@
         window.addEventListener('resize', () => { resizeCanvas(); drawWaveform(); });
 
         ui.canvas.addEventListener('click', (e) => {
-            // We need to use the logical width for click calculation
             const dpr = window.devicePixelRatio || 1;
             const width = ui.canvas.width / dpr;
             const center = width / 2;
@@ -692,23 +685,24 @@
             const ctx = ui.canvas.getContext('2d');
             const dpr = window.devicePixelRatio || 1;
             
-            // Use logical dimensions for calculation because context is scaled
             const width = ui.canvas.width / dpr;
             const height = ui.canvas.height / dpr;
             const center = width / 2;
             
             ctx.clearRect(0, 0, width, height);
-            if (!ui.audio.duration) return;
+            
+            // If no audio source or not loaded, just return
+            // but we might want to draw the random waveform still?
+            if (!ui.audio.duration && state.waveform.length === 0) return;
 
-            const barWidth = 8; // Reduced from 12
-            const gap = 6; // Reduced from 8
+            const barWidth = 8; 
+            const gap = 6; 
             const totalBarWidth = barWidth + gap;
             const waveData = state.waveform;
             
-            const progress = ui.audio.currentTime / ui.audio.duration;
+            const progress = (ui.audio.duration > 0) ? (ui.audio.currentTime / ui.audio.duration) : 0;
             const dataIndex = progress * (waveData.length - 1);
             
-            // Create Gradient for smooth transition across the whole canvas
             const gradient = ctx.createLinearGradient(0, 0, width, 0);
             gradient.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
             gradient.addColorStop(0.49, 'rgba(255, 255, 255, 0.35)');
@@ -728,14 +722,12 @@
                 const barHeight = waveData[i] * (height * 0.8);
                 const y = (height - barHeight) / 2;
                 
-                // Batch all bars into one path
                 if (ctx.roundRect) {
                     ctx.roundRect(x, y, barWidth, barHeight, 6);
                 } else {
                     ctx.rect(x, y, barWidth, barHeight);
                 }
             }
-            // Fill all bars at once with the gradient
             ctx.fill();
         }
         

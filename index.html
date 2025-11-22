@@ -303,14 +303,12 @@
             const files = Array.from(e.target.files).filter(f => f.type.startsWith('audio/') || f.name.endsWith('.mp3'));
             if(files.length > 0) {
                 state.playlist = files;
+                if (!state.userVerified) ui.loadingSpinner.classList.remove('hidden');
                 setupPlayerAfterLoad();
                 ui.fallbackSelector.style.display = 'none';
                 // If user already verified, just close modal and play
                 if(state.userVerified) {
                     closeModalAndPlay();
-                } else {
-                    // Show captcha if not verified
-                    ui.recaptchaWidget.classList.remove('hidden');
                 }
             }
         });
@@ -399,14 +397,9 @@
                         if (!firstFileLoaded) {
                             firstFileLoaded = true;
                             
-                            // Hide loading spinner
-                            ui.loadingSpinner.classList.add('hidden');
-                            
                             // Initialize player with this first track
                             setupPlayerAfterLoad();
                             
-                            // Show the captcha widget immediately
-                            ui.recaptchaWidget.classList.remove('hidden');
                             // If user verified (unlikely this fast, but good for safety)
                             if(state.userVerified) {
                                 closeModalAndPlay();
@@ -486,7 +479,7 @@
             const defaultTitle = file.name.replace(/\.mp3$/i, '');
             updateMetadataUI({
                 title: defaultTitle,
-                artist: "Unknown Artist",
+                artist: "DeL",
                 album: "Unknown Album",
                 picture: null
             });
@@ -568,6 +561,11 @@
                  console.error("Error generating real waveform:", e);
                  // Fallback to random if decoding fails
                  generateRandomWaveform();
+             } finally {
+                 if (!state.userVerified) {
+                     ui.loadingSpinner.classList.add('hidden');
+                     ui.recaptchaWidget.classList.remove('hidden');
+                 }
              }
         }
         function updateMetadataUI(data) {

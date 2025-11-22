@@ -222,19 +222,13 @@
         function playWithFade() {
             if (fadeInterval) clearInterval(fadeInterval);
             ui.audio.playbackRate = 1.0; // Reset playback rate
-            if (ui.audio.paused) ui.audio.volume = 0;
+            // Instant volume, removed fade-in animation
+            ui.audio.volume = 1;
+            state.isFadingOut = false;
+            
             const playPromise = ui.audio.play();
             if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    fadeInterval = setInterval(() => {
-                        if (ui.audio.volume < 0.95) {
-                            ui.audio.volume = Math.min(1, ui.audio.volume + 0.05);
-                        } else {
-                            ui.audio.volume = 1;
-                            clearInterval(fadeInterval);
-                        }
-                    }, 25);
-                }).catch(e => {
+                playPromise.catch(e => {
                     console.warn("Autoplay blocked:", e);
                     state.isPlaying = false;
                     updatePlayButtonUI();

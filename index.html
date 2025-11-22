@@ -662,22 +662,15 @@
 
         function resizeCanvas() {
             if(ui.canvas.parentElement) {
-                // Scale canvas for high DPI displays
-                const dpr = window.devicePixelRatio || 1;
-                ui.canvas.width = ui.canvas.parentElement.offsetWidth * dpr;
-                ui.canvas.height = ui.canvas.parentElement.offsetHeight * dpr;
+                ui.canvas.width = ui.canvas.parentElement.offsetWidth;
+                ui.canvas.height = ui.canvas.parentElement.offsetHeight;
             }
         }
         window.addEventListener('resize', () => { resizeCanvas(); drawWaveform(); });
 
         ui.canvas.addEventListener('click', (e) => {
-            // Account for DPR when calculating click position
-            const dpr = window.devicePixelRatio || 1;
-            const rect = ui.canvas.getBoundingClientRect();
-            const clickX = (e.clientX - rect.left) * dpr;
             const center = ui.canvas.width / 2;
-            
-            if (clickX > center) ui.audio.currentTime += 5;
+            if (e.offsetX > center) ui.audio.currentTime += 5;
             else ui.audio.currentTime -= 5;
         });
 
@@ -687,16 +680,11 @@
             const height = ui.canvas.height;
             const center = width / 2;
             
-            // Get Device Pixel Ratio for sharp rendering
-            const dpr = window.devicePixelRatio || 1;
-            
             ctx.clearRect(0, 0, width, height);
             if (!ui.audio.duration) return;
 
-            // Scale visual elements by DPR
-            const barWidth = 8 * dpr; 
-            const gap = 6 * dpr;
-            const radius = 6 * dpr;
+            const barWidth = 8; // Reduced from 12
+            const gap = 6; // Reduced from 8
             const totalBarWidth = barWidth + gap;
             const waveData = state.waveform;
             
@@ -713,7 +701,7 @@
                 const y = (height - barHeight) / 2;
                 
                 ctx.beginPath();
-                ctx.roundRect(x, y, barWidth, barHeight, radius);
+                ctx.roundRect(x, y, barWidth, barHeight, 6);
                 
                 if (x < center - (barWidth/2)) {
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';

@@ -708,6 +708,17 @@
             const progress = ui.audio.currentTime / ui.audio.duration;
             const dataIndex = progress * (waveData.length - 1);
             
+            // Create Gradient for smooth transition across the whole canvas
+            const gradient = ctx.createLinearGradient(0, 0, width, 0);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+            gradient.addColorStop(0.49, 'rgba(255, 255, 255, 0.35)');
+            gradient.addColorStop(0.5, '#ffffff');
+            gradient.addColorStop(0.51, 'rgba(255, 255, 255, 0.85)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0.85)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+
             for (let i = 0; i < waveData.length; i++) {
                 const offset = (i - dataIndex) * totalBarWidth;
                 const x = center + offset;
@@ -717,23 +728,15 @@
                 const barHeight = waveData[i] * (height * 0.8);
                 const y = (height - barHeight) / 2;
                 
-                ctx.beginPath();
-                // roundRect is supported in modern browsers; fallback not strictly needed for this env
+                // Batch all bars into one path
                 if (ctx.roundRect) {
                     ctx.roundRect(x, y, barWidth, barHeight, 6);
                 } else {
                     ctx.rect(x, y, barWidth, barHeight);
                 }
-                
-                if (x < center - (barWidth/2)) {
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-                } else if (x > center + (barWidth/2)) {
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'; 
-                } else {
-                    ctx.fillStyle = '#ffffff';
-                }
-                ctx.fill();
             }
+            // Fill all bars at once with the gradient
+            ctx.fill();
         }
         
         function animate() {

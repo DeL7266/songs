@@ -227,7 +227,8 @@
             isRepeat: false,
             waveform: [], 
             themeColor: [20, 20, 30],
-            userVerified: false // Tracks if user clicked reCAPTCHA
+            userVerified: false, // Tracks if user clicked reCAPTCHA
+            initialLoadComplete: false // Tracks if streaming started
         };
 
         // Global Audio Context
@@ -274,14 +275,22 @@
         ui.manualFileInput.addEventListener('change', (e) => {
             const files = Array.from(e.target.files).filter(f => f.type.startsWith('audio/') || f.name.endsWith('.mp3'));
             if(files.length > 0) {
-                 // WRAP FILES
-                 state.playlist = files.map(f => ({
+                // Map Files to Playlist Objects
+                state.playlist = files.map(f => ({
                     name: f.name,
                     url: URL.createObjectURL(f),
                     blob: f
                 }));
-                setupPlayerAfterLoad();
+                
+                // Local files load instantly, so we skip waiting for "streaming"
+                state.initialLoadComplete = true;
+                ui.loadingSpinner.classList.add('hidden');
+                ui.recaptchaWidget.classList.remove('hidden');
                 ui.fallbackSelector.style.display = 'none';
+                
+                renderPlaylist();
+                loadTrack(0, false);
+
                 // If user already verified, just close modal and play
                 if(state.userVerified) {
                     closeModalAndPlay();
@@ -309,12 +318,9 @@
                 state.userVerified = true;
 
                 // 3. Attempt to Start
-                // We wait a moment for visual satisfaction
                 setTimeout(() => {
                     if (state.playlist.length > 0) {
                         closeModalAndPlay();
-                    } else {
-                        // Playlist not ready yet (still fetching or failed)
                     }
                 }, 600); 
             }, 800);
@@ -323,14 +329,9 @@
         function closeModalAndPlay() {
             ui.startModal.classList.add('opacity-0', 'pointer-events-none');
             state.isPlaying = true;
-            // UPDATED ICON SIZE (Mobile: text-6xl)
             ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
             
-            // If we haven't loaded the track src yet, loadTrack(0) handles it.
-            // If src is already set, just play.
-            if(!ui.audio.src || ui.audio.src === window.location.href || ui.audio.src === "") {
-                loadTrack(0);
-            } else {
+            if(ui.audio.paused) {
                 ui.audio.play().catch(e => console.log("Play prevented:", e));
             }
             
@@ -344,75 +345,29 @@
         }
 
         async function initPlayer() {
-            let firstFileLoaded = false;
+            // Initialize playlist with URLs directly (No pre-fetching)
+            state.playlist = config.files.map(fileName => ({
+                name: fileName,
+                url: `${config.folder}/${fileName}`,
+                blob: null // Will be fetched lazily for metadata/waveform
+            }));
 
-            // We process files to create playlist structure
-            for (let i = 0; i < config.files.length; i++) {
-                const fileName = config.files[i];
-                const path = `${config.folder}/${fileName}`;
-                
-                // Create track object with placeholder for blob
-                const track = {
-                    name: fileName,
-                    url: path,
-                    blob: null
-                };
-
-                try {
-                    // We only fully download the first file to ensure system is working 
-                    // and to respect the loading screen timing/check.
-                    if (i === 0) {
-                         const response = await fetch(path);
-                         if (response.ok) {
-                             const blob = await response.blob();
-                             blob.name = fileName;
-                             track.blob = blob;
-                             
-                             state.playlist.push(track);
-                             firstFileLoaded = true;
-                             
-                             // Unlock UI as soon as first file is verified
-                             ui.loadingSpinner.classList.add('hidden');
-                             renderPlaylist();
-                             // Pre-load metadata for first track (don't play yet)
-                             loadTrack(0, false); 
-                             ui.recaptchaWidget.classList.remove('hidden');
-
-                             if(state.userVerified) closeModalAndPlay();
-                         } else {
-                             console.warn(`Could not load ${fileName}`);
-                         }
-                    } else {
-                        // For other files, we assume they exist to allow instant streaming
-                        // We push them immediately without fetching
-                        state.playlist.push(track);
-                        if (firstFileLoaded) renderPlaylist();
-                    }
-                } catch (error) {
-                    console.error(`Error checking ${fileName}:`, error);
-                }
-            }
-
-            // If loop finishes and nothing loaded (meaning first file failed)
-            if (!firstFileLoaded) {
+            if (state.playlist.length > 0) {
+                renderPlaylist();
+                // Trigger loading of the first track to start streaming and fire 'loadeddata'
+                loadTrack(0, false);
+            } else {
+                // If no config files, show fallback immediately
                 ui.loadingSpinner.classList.add('hidden');
                 ui.fallbackSelector.classList.remove('hidden');
                 ui.titleDesktop.innerText = "Select Files";
-                ui.artistDesktop.innerText = "Automatic loading blocked by browser.";
+                ui.artistDesktop.innerText = "Automatic loading blocked or no files.";
             }
         }
 
-        function setupPlayerAfterLoad() {
-            renderPlaylist();
-            // Pre-load metadata for first track (don't play yet)
-            loadTrack(0, false); 
-        }
-
-        // --- Core Player Logic ---
-
         function renderPlaylist() {
             ui.playlistItems.innerHTML = '';
-            state.playlist.forEach((item, index) => {
+            state.playlist.forEach((track, index) => {
                 const div = document.createElement('div');
                 div.className = `p-3 rounded-lg cursor-pointer hover:bg-white/10 transition flex items-center gap-3 group ${index === state.currentIndex ? 'bg-white/20' : ''}`;
                 div.innerHTML = `
@@ -420,7 +375,7 @@
                         ${index + 1}
                     </div>
                     <div class="overflow-hidden">
-                        <div class="truncate font-medium text-sm">${item.name.replace(/\.mp3$/i, '')}</div>
+                        <div class="truncate font-medium text-sm">${track.name.replace(/\.mp3$/i, '')}</div>
                     </div>
                 `;
                 div.onclick = () => {
@@ -434,19 +389,45 @@
             });
         }
 
-        function loadTrack(index, autoPlay = true) {
+        async function loadTrack(index, autoPlay = true) {
             if (!state.playlist[index]) return;
             
             const track = state.playlist[index];
             
-            // Stream from URL directly
-            // Check if src is already set to this URL to avoid reload
-            // Handle relative URLs by checking endsWith or full resolution
-            if(!ui.audio.src.includes(track.url)) {
+            // Set Audio Source for Streaming
+            // We check if source is already set to avoid reloading it if paused
+            const currentSrc = ui.audio.currentSrc || ui.audio.src;
+            // Note: browsers resolve relative URLs in src property to absolute
+            if (!currentSrc.includes(encodeURI(track.url)) && currentSrc !== track.url) {
                 ui.audio.src = track.url;
                 ui.audio.load();
             }
             
+            // --- Streaming Logic for Initial Load ---
+            // Wait for the first packet (loadeddata) to show Recaptcha
+            if (!state.initialLoadComplete) {
+                const onFirstPacket = () => {
+                    state.initialLoadComplete = true;
+                    ui.loadingSpinner.classList.add('hidden');
+                    ui.recaptchaWidget.classList.remove('hidden');
+                    
+                    // If user somehow already verified (e.g., fast refresh), play
+                    if (state.userVerified) closeModalAndPlay();
+                    
+                    ui.audio.removeEventListener('loadeddata', onFirstPacket);
+                    ui.audio.removeEventListener('canplay', onFirstPacket);
+                };
+
+                ui.audio.addEventListener('loadeddata', onFirstPacket);
+                // Fallback if loadeddata misses
+                ui.audio.addEventListener('canplay', onFirstPacket);
+                
+                // Backup: If readyState is already sufficient
+                if(ui.audio.readyState >= 2) {
+                    onFirstPacket();
+                }
+            }
+
             // Reset UI Time
             if(autoPlay) {
                  ui.currentTime.innerText = "0:00";
@@ -459,129 +440,106 @@
                 else child.classList.remove('bg-white/20');
             });
 
-            // Metadata Default (Immediate)
+            // Set Temporary Metadata
             const defaultTitle = track.name.replace(/\.mp3$/i, '');
             updateMetadataUI({
                 title: defaultTitle,
-                artist: "Loading Info...",
-                album: "Please wait",
+                artist: "Loading Metadata...",
+                album: "Streaming...",
                 picture: null
             });
             
-            // Logic to process metadata and waveform
-            const processMetadata = (blob) => {
-                 // Read ID3 Tags
-                new jsmediatags.Reader(blob)
-                    .setTagsToRead(["title", "artist", "album", "picture"])
-                    .read({
-                        onSuccess: (tag) => {
-                            const tags = tag.tags;
-                            let pictureUrl = null;
-                            if (tags.picture) {
-                                const { data, format } = tags.picture;
-                                let base64String = "";
-                                for (let i = 0; i < data.length; i++) {
-                                    base64String += String.fromCharCode(data[i]);
-                                }
-                                pictureUrl = `data:${format};base64,${window.btoa(base64String)}`;
-                            }
-                            updateMetadataUI({
-                                title: tags.title || defaultTitle,
-                                artist: tags.artist || "Unknown Artist",
-                                album: tags.album || "Unknown Album",
-                                picture: pictureUrl
-                            });
-                        },
-                        onError: (error) => {
-                             updateMetadataUI({
-                                title: defaultTitle,
-                                artist: "Unknown Artist",
-                                album: "Unknown Album",
-                                picture: null
-                            });
-                        }
-                    });
-                    
-                // Generate Real Waveform
-                processAudioForWaveform(blob);
-            };
+            // Set Temporary Waveform
+            generateRandomWaveform();
 
-            // Check if we have the blob cached
-            if (track.blob) {
-                processMetadata(track.blob);
-            } else {
-                // If not, show random waveform temporarily and fetch in background
-                generateRandomWaveform();
-                
-                // Background Fetch
-                fetch(track.url)
-                    .then(res => res.blob())
-                    .then(blob => {
+            // Background Fetch for High-Res Data (Tags + Waveform)
+            if (!track.blob) {
+                // We fetch the full blob in background for metadata/waveform
+                try {
+                    const response = await fetch(track.url);
+                    if (response.ok) {
+                        const blob = await response.blob();
                         blob.name = track.name;
-                        track.blob = blob; // Cache it
-                        // Only update if we are still playing the same track
-                        if (state.playlist[state.currentIndex] === track) {
-                            processMetadata(blob);
-                        }
-                    })
-                    .catch(err => console.error("Background fetch failed for metadata:", err));
+                        track.blob = blob;
+                        processTrackData(track);
+                    }
+                } catch (e) {
+                    console.warn("Background metadata fetch failed:", e);
+                }
+            } else {
+                processTrackData(track);
             }
             
             if (autoPlay && state.isPlaying) {
-                const playPromise = ui.audio.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(e => {
-                        console.warn("Autoplay blocked:", e);
-                        state.isPlaying = false;
-                        ui.playBtn.innerHTML = '<i class="fas fa-play text-6xl md:text-7xl ml-1"></i>';
-                    });
-                }
+                ui.audio.play().catch(e => {
+                    console.warn("Autoplay blocked:", e);
+                    state.isPlaying = false;
+                    ui.playBtn.innerHTML = '<i class="fas fa-play text-6xl md:text-7xl ml-1"></i>';
+                });
             }
         }
 
+        function processTrackData(track) {
+            if (!track.blob) return;
+            
+            // Read Tags
+            new jsmediatags.Reader(track.blob)
+                .setTagsToRead(["title", "artist", "album", "picture"])
+                .read({
+                    onSuccess: (tag) => {
+                        const tags = tag.tags;
+                        let pictureUrl = null;
+                        if (tags.picture) {
+                            const { data, format } = tags.picture;
+                            let base64String = "";
+                            for (let i = 0; i < data.length; i++) {
+                                base64String += String.fromCharCode(data[i]);
+                            }
+                            pictureUrl = `data:${format};base64,${window.btoa(base64String)}`;
+                        }
+                        updateMetadataUI({
+                            title: tags.title || track.name.replace(/\.mp3$/i, ''),
+                            artist: tags.artist || "Unknown Artist",
+                            album: tags.album || "Unknown Album",
+                            picture: pictureUrl
+                        });
+                    },
+                    onError: () => {}
+                });
+
+            // Generate Real Waveform
+            processAudioForWaveform(track.blob);
+        }
+
         async function processAudioForWaveform(fileBlob) {
-             // Use a temporary placeholder while processing
              try {
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 
                 const arrayBuffer = await fileBlob.arrayBuffer();
-                // We need to decode the audio data to get the raw PCM samples
                 const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
                 
-                // Get the Left channel data (usually channel 0)
                 const rawData = audioBuffer.getChannelData(0); 
-                const samples = 200; // Number of bars we want to display
+                const samples = 200; 
                 const blockSize = Math.floor(rawData.length / samples);
                 const waveform = [];
                 
-                // Calculate average amplitude for each block
                 for (let i = 0; i < samples; i++) {
                     let sum = 0;
                     for (let j = 0; j < blockSize; j++) {
-                        // Use Math.abs because audio signal goes from -1 to 1
                         sum += Math.abs(rawData[i * blockSize + j]);
                     }
-                    // Average amplitude for this block
                     let avg = sum / blockSize; 
                     waveform.push(avg);
                 }
                 
-                // Normalize the data (scale it so the loudest part is 1.0)
-                const maxVal = Math.max(...waveform) || 1; // Avoid divide by zero
-                state.waveform = waveform.map(v => {
-                    // Scale and ensure a minimum height of 0.1 for visibility
-                    return Math.max(0.1, (v / maxVal)); 
-                });
-                
-                // Add padding to start and end for the scrolling effect logic
+                const maxVal = Math.max(...waveform) || 1; 
+                state.waveform = waveform.map(v => Math.max(0.1, (v / maxVal))); 
                 state.waveform = [0.1, 0.1, 0.1, ...state.waveform, 0.1, 0.1, 0.1];
                 
                 drawWaveform();
 
              } catch (e) {
                  console.error("Error generating real waveform:", e);
-                 // Fallback to random if decoding fails
-                 generateRandomWaveform();
              }
         }
 
@@ -596,7 +554,7 @@
                 ui.art.src = data.picture;
                 ui.art.onload = () => updateThemeFromImage(ui.art);
             } else {
-                ui.art.src = "https://via.placeholder.com/500?text=No+Cover";
+                ui.art.src = "https://via.placeholder.com/500?text=Music";
                 updateThemeFromImage(null);
             }
         }
@@ -611,7 +569,6 @@
                 const rgb = `${color[0]}, ${color[1]}, ${color[2]}`;
                 
                 ui.bgLayer.style.background = `linear-gradient(135deg, rgba(${rgb}, 0.9) 0%, rgba(10,10,10,1) 100%)`;
-                // ui.playBtn.style.boxShadow = `0 0 30px rgba(${rgb}, 0.6)`; // Removed this line
             } catch (e) {}
         }
 
@@ -620,12 +577,10 @@
             if (ui.audio.paused) {
                 ui.audio.play();
                 state.isPlaying = true;
-                // UPDATED ICON SIZE (Mobile: text-6xl)
                 ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
             } else {
                 ui.audio.pause();
                 state.isPlaying = false;
-                // UPDATED ICON SIZE (Mobile: text-6xl)
                 ui.playBtn.innerHTML = '<i class="fas fa-play text-6xl md:text-7xl ml-1"></i>';
             }
         });
@@ -633,7 +588,6 @@
         ui.prevBtn.addEventListener('click', () => {
             state.currentIndex = (state.currentIndex - 1 + state.playlist.length) % state.playlist.length;
             state.isPlaying = true;
-            // UPDATED ICON SIZE (Mobile: text-6xl)
             ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
             loadTrack(state.currentIndex);
         });
@@ -645,7 +599,6 @@
                 state.currentIndex = (state.currentIndex + 1) % state.playlist.length;
             }
             state.isPlaying = true;
-            // UPDATED ICON SIZE (Mobile: text-6xl)
             ui.playBtn.innerHTML = '<i class="fas fa-pause text-6xl md:text-7xl"></i>';
             loadTrack(state.currentIndex);
         });
@@ -700,11 +653,9 @@
                 const dpr = window.devicePixelRatio || 1;
                 const rect = ui.canvas.parentElement.getBoundingClientRect();
                 
-                // Set actual size in memory (scaled to account for extra pixel density)
                 ui.canvas.width = rect.width * dpr;
                 ui.canvas.height = rect.height * dpr;
                 
-                // Normalize coordinate system to use css pixels
                 ui.canvas.style.width = `${rect.width}px`;
                 ui.canvas.style.height = `${rect.height}px`;
                 
@@ -715,7 +666,6 @@
         window.addEventListener('resize', () => { resizeCanvas(); drawWaveform(); });
 
         ui.canvas.addEventListener('click', (e) => {
-            // We need to use the logical width for click calculation
             const dpr = window.devicePixelRatio || 1;
             const width = ui.canvas.width / dpr;
             const center = width / 2;
@@ -727,7 +677,6 @@
             const ctx = ui.canvas.getContext('2d');
             const dpr = window.devicePixelRatio || 1;
             
-            // Use logical dimensions for calculation because context is scaled
             const width = ui.canvas.width / dpr;
             const height = ui.canvas.height / dpr;
             const center = width / 2;
@@ -735,15 +684,14 @@
             ctx.clearRect(0, 0, width, height);
             if (!ui.audio.duration) return;
 
-            const barWidth = 8; // Reduced from 12
-            const gap = 6; // Reduced from 8
+            const barWidth = 8; 
+            const gap = 6; 
             const totalBarWidth = barWidth + gap;
             const waveData = state.waveform;
             
             const progress = ui.audio.currentTime / ui.audio.duration;
             const dataIndex = progress * (waveData.length - 1);
             
-            // Create Gradient for smooth transition across the whole canvas
             const gradient = ctx.createLinearGradient(0, 0, width, 0);
             gradient.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
             gradient.addColorStop(0.49, 'rgba(255, 255, 255, 0.35)');
@@ -763,14 +711,12 @@
                 const barHeight = waveData[i] * (height * 0.8);
                 const y = (height - barHeight) / 2;
                 
-                // Batch all bars into one path
                 if (ctx.roundRect) {
                     ctx.roundRect(x, y, barWidth, barHeight, 6);
                 } else {
                     ctx.rect(x, y, barWidth, barHeight);
                 }
             }
-            // Fill all bars at once with the gradient
             ctx.fill();
         }
         
